@@ -20,6 +20,6 @@ t = time.localtime()
 minutes_since_midnight = t.tm_hour * 60 + t.tm_min                # an integer from 0 to 1440
 minutes_after_evening = max(0, minutes_since_midnight - evening)  # same as above
 minutes_till_morning = max(0, morning - minutes_since_midnight)   # an integer from 0 to ttj
-step = (daytemp - nighttemp) / ttj                                # temp delta
+step = int((daytemp - nighttemp) / ttj)                           # temp delta
 
 print(max(nighttemp, daytemp - max(minutes_after_evening, min(minutes_till_morning, ttj)) * step))
