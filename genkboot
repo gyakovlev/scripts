@@ -1,0 +1,124 @@
+#!/bin/bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+# settings
+KBOOTDIR="/boot"
+#KBOOTCONF="/boot/kboot.conf"
+KBOOTAPPEND="root=/dev/sda2"
+#KBOOTAPPEND+=" quiet"
+
+INITRD_FILE="initrd"
+KERNEL_FILE="vmlinux"
+
+GENKBOOT_VERSION="0.0.1"
+
+
+# dies with optional message
+die() {
+        [[ ${QUIET-no} ]] && echo -e "${NOCOLOR=\e[1;31m*\e[0m }${*}" >&2
+        exit 1
+} # die()
+
+
+# outputs gentoo-style green * prefixed message, a good one ofc
+# does not clobber standard output to preserve redirection capability
+good() {
+	[[ ${QUIET-no} ]] && echo -e "${NOCOLOR=\e[1;32m*\e[0m }${*}" >&2
+	: # needed to fool -e mode
+} # good()
+
+
+# do I need to explain this?
+usage() {
+	echo "Usage: ${0} [<options>] > /boot/kboot.conf"
+} # usage()
+
+
+help() {
+	usage
+	echo
+	echo "Generate kboot.conf file with all kernels found in ${KBOOTDIR}."
+	echo
+	echo "Options:"
+	echo "  -C, --nocolor	Disable colored output"
+	echo "  -d, --debug	Debug mode (sets -x shell option)"
+	echo "  -V, --version	Print version number"
+	echo "  -q, --quiet	Quiet mode"
+	
+	
+}
+
+
+# returns version sorted, null-terminated array of full paths to kernel images
+find_kernels() {
+ 	# this it nameref, running "find_kernels somevar" will set $somevar to the
+	# value of arr generated here
+	local -n arr="${1}"
+
+	IFS= mapfile -d '' arr < <(find "${KBOOTDIR}" -maxdepth 2 -xtype f \
+		-iname "${KERNEL_FILE}" -print0  2>/dev/null | sort -Vurz - -- )
+}
+
+
+# outputs valid kboot.conf, newest kernel version set to default
+generate_kbootconf() {
+	local config dir initrd kernel kernels linux systemmap
+	local default=""
+	find_kernels kernels
+	for kernel in "${kernels[@]}"; do
+		dir="$(basename "$(dirname "${kernel}")")"
+		linux="${dir}/${KERNEL_FILE}"
+		initrd="${dir}/${INITRD_FILE}"
+		config="${dir}/config"
+		systemmap="${dir}/System.map"
+		[[ -d ${KBOOTDIR}/${dir} ]]
+		[[ -f ${KBOOTDIR}/${config} ]]
+		[[ -f ${KBOOTDIR}/${systemmap} ]]
+		[[ -f ${KBOOTDIR}/${initrd} ]]
+		[[ -f ${KBOOTDIR}/${linux} ]]
+		good "found ${dir}"
+		if [[ -z ${default} ]]; then
+			default=true
+			good "setting \"${dir}\" as default boot entry"
+			echo default="${dir}"
+		fi
+		echo "${dir}='/${linux} initrd=/${initrd} ${KBOOTAPPEND}'"
+	done
+	good "done"
+
+}
+
+main(){
+	local me="$(basename ${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]})"
+	while [[ ${#} -gt 0 ]]; do
+		case ${1} in
+			-h|--help)
+				help
+				exit 0
+				;;
+			-V|--version)
+				echo "${me} ${GENKBOOT_VERSION}"
+				exit 0
+				;;
+			-d|--debug)
+				set -x
+				;;
+			-C|--nocolor)
+				NOCOLOR=
+				;;
+			-q|--quiet)
+				QUIET=
+				;;
+			-*)
+				usage >&2
+				exit 1
+				;;
+		esac
+		shift
+	done
+	generate_kbootconf
+}
+main "${@}"
+
